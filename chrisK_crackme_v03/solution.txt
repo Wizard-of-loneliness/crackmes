@@ -1,13 +1,72 @@
+1) Obviously we need to get to "00401881" part of the binary to trigger success condition, i.e to print "Correct!!". To get there we need "_check(0040163F)" fuction to return "1".
+
+2) _check condition will check two offsets "_secret(00404020)" and "_magic(00407240)", this function will return "1" if _magic[(14-i)*4]= _secret[i*4]. Which means that value at the _magic offset should be equal to values at _secret but the order is reversed.
+
+3) Now let's check references for _secret and _magic offsets.
+
+4) We could see the references for _secret in "_initHash(00401595)" function, So let us check that function.
+
+5) The purpose of this function seems to be setting values at _hash(00407080) to "0"(upto 75 bytes) and subract values at _secret with the value returned by "_somerandomnumber(00401460)" function.
+
+6) If you open that "_somerandomnumber", It's huge and i haven't even attempted to understand it. I just loaded the binary with x32dbg and despite it's name it always returns "1", Thankyou Chris :)
+
+7) So after loading in to memory, values at _secret will be reduced by "1"
+
+8) Now let's check for references for _magic offset, We could see that it's in "_bool_to_int_packets(00401683)". The "_hash" offset has been passed to this function as parametre which we have seen in _initHash function. this _hash offset has been referenced in our main function. Let's check what's going on.
+
+9) Checking the loop in main function, We can conclude that "0x30" will be subracted from every letter from user input and that value will be used as offset at _hash to set values to "1".
+
+10) Now we know we where our input is being used, It is used to calculate offset at _hash and set values to "1" according to our input. Let's continue to check _bool_to_int_packets function
+
+11) I struggled some time with this function in IDA, so i just loaded in Ghidra. It's a lot more easier to functions like these in Ghidra.
+
+12) Ghidra made some mistakes that we would have to correct like editing size of an array, you could easily understand what's going on.
+
+13) In Below decompiled code, we could see that an int array "local_38" of size 5(Ghidra will probably think it's size is 4) is storing values of 5 bytes. Remember that these values will be set by our user input at _hash offset.     
+
+while (local_18 < local_24) {
+    local_38[local_18] = *(int *)(param_1 + (local_18 + local_14) * 4);
+    local_18 = local_18 + 1;
+
+14) And in below decompiled code, we could see that it's clearly converting boolean(binary stream) into integers and these values are being stored at _magic offset. Remember that _check function will check for these values.
+
+while (local_1c < local_24) {
+    iVar1 = local_38[(local_24 + -1) - local_1c];
+    dVar2 = _pow(2.0,(double)local_1c);
+    *(int *)(&_magic + local_10 * 4) = iVar1 * (int)ROUND(dVar2) + *(int *)(&_magic + local_10 * 4);
+    local_1c = local_1c + 1; + 1;
+
+15) Let's recap:
+	a) We know that the values at _secret offset will be reduced by "1" after _inithash function.
+	So the new values at _secret offset will be ["00", "01", "1A", "12", "13", "01", "00", "00", "14", "05", "08", "05", "00", "06", "16"]
+	b) The values at _magic will be checked with values at _secret offset but in reverse order.
+	magic_values = secret_values[::-1]
+	c) now using our input values at _hash values will be set which is used to generate magic function.
+
+16) let's write a keygen in python.
+
 import math
 
+#New values at _secret offset after _inithash function.
 secret_list = ["00", "01", "1A", "12", "13", "01", "00", "00", "14", "05", "08", "05", "00", "06", "16"]
+
+#_check function
 valid_magic_list = secret_list[::-1]
+
+#converting values at _magic offset, this tells us what the input should be
 bin_data = ""
 for magic_hex in valid_magic_list:
     bin_data += "{0:05b}".format(int(magic_hex, 16))
 key = ""
+
+#using the bin_data we got above we can create a key such that we will set binary values that satistfies _check function.
 for i in range(len(bin_data)):
     if bin_data[i] == "1":
         hexstring = str(hex(0x30 + i))[2:]
         key += bytes.fromhex(hexstring).decode('utf-8')
+#print key
 print("Key:", key)
+
+17) If we run the above script we will get "02378ACEKMNPabefgjlmou" as key, Which sould give you "Correct!!" response
+
+Note: python script will be available along with this solution. please let me know in the comments if you have any form of suggestions.
